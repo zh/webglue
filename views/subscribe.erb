@@ -1,0 +1,47 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+  <title>Hub - Subscription debug</title>
+  <link rel="stylesheet" href="/css/hub.css" type="text/css" media="screen" />
+</head>
+<body>
+
+<h1>Subscribe/Unsubscribe</h1>
+
+<form action="/subscribe" method="post" accept-charset="utf-8">
+  <p>
+    <label for="callback">Callback: <em>(the subscriber URL)</em></label>
+    <input type="text" name="hub.callback" value="" id="callback">
+  </p>
+  <p>
+    <label for="topic">Topic: <em>(the feed URL)</em></label>
+    <input type="text" name="hub.topic" value="" id="topic">
+  </p>
+
+  <p>
+    <label for="verify">Verify type:</label>
+    <select name="hub.verify" id="async">
+      <option value="sync" selected="selected">Synchronous</option>
+      <option value="async">Asynchronous</option>
+    </select>
+  </p>
+
+  <p>
+    <label for="mode">Mode:</label>
+    <select name="hub.mode" id="mode">
+      <option value="subscribe" selected="selected">Subscribe</option>
+      <option value="unsubscribe">Unsubscribe</option>
+    </select>
+  </p>
+
+  <p>
+    <label for="verify_token">Verify token:</label>
+    <input type="text" name="hub.verify_token" id="verify_token" value="">
+  </p>
+  <p><input type="submit" value="Do it"></p>
+</form>  
+<em>Note: submission will result in a HTTP 204 response to acknowledge; in browsers this looks like a no-op</em>
+
+</body>
+</html>

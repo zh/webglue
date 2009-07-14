@@ -1,0 +1,6 @@
+*.orig
+*.rej
+*~
+*.log
+*.db
+backup
