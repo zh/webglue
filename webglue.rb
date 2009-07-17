@@ -164,7 +164,7 @@ post '/subscribe' do
   # For now, only using the first preference of verify mode 
   verify = verify.split(',').first 
   # throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
-  # will support anly 'sync' mode for now
+  # will support only 'sync' mode for now
   throw :halt, [400, "Bad request: Unrecognized verification mode"] unless verify == 'sync'
   begin
     hash =  WebGlue::Topic.to_hash(topic)
@@ -179,7 +179,7 @@ post '/subscribe' do
     end
 
     # Add subscription
-    # subscribe/unsubscribe to/from ALL channels with that topici
+    # subscribe/unsubscribe to/from ALL channels with that topic
     cb =  WebGlue::Topic.to_hash(callback)
     if mode == 'subscribe'
       unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
