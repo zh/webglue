@@ -46,20 +46,29 @@ If you are using http://heroku.com/ for deployment, your '.gems' file will look 
 Runing
 ------
 
-The whole system is implemented like a sinatra [ http://www.sinatrarb.com/ ] application. 
+The whole system is implemented as a Sinatra [ http://www.sinatrarb.com/ ] application. 
 To start it locally (on port 4567 for example):
 
   git clone git://github.com/zh/webglue.git   
   cd webglue
   rackup -p 4567
 
-http://heroku.com/ will automaticaly recognize tartup file and run your application on
-deployment:
+http://heroku.com/ will automatically recognize the startup file (config.ru) and will 
+run your application after the deployment:
 
   git clone git://github.com/zh/webglue.git
   cd webglue
   heroku create mypubhub
   git push heroku master
+
+
+PubSub
+-------
+
+Both publishing and subscriptions going to the same endpoint - '/'. So if your application
+is running on URL http://localhost:4567/ , that will be the endpoint for both publishers
+(atom:link[@rel="hub"] in the feed) and subscribers (POST requests for subscription).
+Only for debugging purposes, there are two web form on '/publish' and '/subscribe' URLs.
 
 
 Publishing new topics
@@ -70,11 +79,15 @@ http://localhost:4567/publish and insert your Atom feed in the 'Topic:' text box
 "Publish". There will be no changes on the screen, because the hub is responding with
 HTTP code 204 "No Content".
 
-You are also POST directly to http://localhost:4567/publish with parameters, described
+You can also POST directly to http://localhost:4567/ with parameters, described
 in the "PubSubHubbub Core 0.1" document - 
 http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.1.html
 
-For now there is no automatic check for updated feeds implemented, so after changes in
+Also in your feed, insert the line:
+
+  <link rel="hub" href="http://localhost:4567/" />  (adjust for your install)
+
+For now, there is no automatic check for updated feeds implemented, so after changes in
 some feed, repeat the actions, described above (from the web form or via POST).
 Publishing is possible once every 5 min.
 
@@ -86,12 +99,15 @@ If your application is running on URL http://localhost:4567/ , go to
 http://localhost:4567/subscribe and fill the web form:
 
  - Callback - URL to the webhook, which will receive Atom-formated notifications
- - Topic - atom feed URL, ALREADY PUBLISHED to the system - see 'Publishing new topics' 
+ - Topic - Atom feed URL, ALREADY PUBLISHED to the system - see 'Publishing new topics' 
    above
  - Verify mode - only 'Synchronous' mode is supported for now
  - Mode - 'Subscribe' for adding new subscribers and 'Unsubscribe' for removing 
    already inserted
  - Verify token - something that your callback need to approve
+
+You can send also POST subscription requests with the required parameters directly to
+the hub endpoint (http://localhost:4567/ in our example).
 
 The hub is implementing callbacks verification, described in the "PubSubHubbub Core 0.1" 
 document (sending back 'hub.challenge' parameter in the response body).
@@ -102,8 +118,8 @@ with HTTP code 204 "No Content".
 Notifications format
 ---------------------
 
-Current implementation fetch the Atom feed and just remove already known entries from it,
-without touching other parts of the feed ('title', 'id', 'author' etc.). After that, the
-feed, with only new entries in it is resend to all topic's subscribers. Because of that,
-the hub cannot process RSS feeds and have some problems with non-well formated feeds.
-If try to fix this in the future releases. 
+Current implementation fetch the Atom feeds and just remove already known entries from 
+them, without touching other parts of the feed ('title', 'id', 'author' etc.). 
+After that, the feed, with only new entries in it is resend to all topic's subscribers. 
+Because of that, the hub cannot process RSS feeds and may have some problems with 
+non-well formated feeds. I'll try to fix this in the future releases. 

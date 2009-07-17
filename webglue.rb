@@ -110,90 +110,100 @@ helpers do
     return true
   end
 
+  # Publishers pinging this URL, when there is new content
+  def do_publish(params)
+    unless params['hub.url'] and not params['hub.url'].empty?
+      throw :halt, [400, "Bad request: Empty or missing 'hub.url' parameter"]
+    end
+    begin 
+      hash = WebGlue::Topic.to_hash(params['hub.url'])
+      topic = DB[:topics].filter(:url => hash)
+      if topic.first # already registered
+        # minimum 5 min interval between pings
+        time_diff = (Time.now - topic.first[:updated]).to_i
+        throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+        topic.update(:updated => Time.now)
+        subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id])
+        urls = subscribers.collect { |u| WebGlue::Topic.to_url(u[:callback]) }
+        atom_diff = WebGlue::Topic.diff(params['hub.url'], true)
+        postman(urls, atom_diff) if (urls.length > 0 and atom_diff)
+      else  
+        DB[:topics] << { :url => hash, :created => Time.now, :updated => Time.now }
+      end
+      throw :halt, [204, "204 No Content"]
+    rescue Exception => e
+      throw :halt, [404, e.to_s]
+    end
+  end
+  
+  # Subscribe to existing topics
+  def do_subscribe(params)
+    mode     = params['hub.mode']
+    callback = params['hub.callback']
+    topic    = params['hub.topic']
+    verify   = params['hub.verify']
+    vtoken   = params['hub.verify_token']
+    unless callback and topic and verify
+      throw :halt, [400, "Bad request: Expected 'hub.callback', 'hub.topic', and 'hub.verify'"]
+    end
+    throw :halt, [400, "Bad request: Empty 'hub.callback' or 'hub.topic'"]  if callback.empty? or topic.empty?
+    throw :halt, [400, "Bad request: Unrecognized mode"] unless ['subscribe', 'unsubscribe'].include?(mode)
+    
+    # For now, only using the first preference of verify mode 
+    verify = verify.split(',').first 
+    # throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
+    # will support only 'sync' mode for now
+    throw :halt, [400, "Bad request: Unrecognized verification mode"] unless verify == 'sync'
+    begin
+      hash =  WebGlue::Topic.to_hash(topic)
+      tp =  DB[:topics].filter(:url => hash).first
+      throw :halt, [404, "Not Found"] unless tp[:id]
+      
+      state = (verify == 'async') ? 1 : 0
+      data = { :mode => mode, :verify => verify, :vtoken => vtoken, :topic => topic }
+      if verify == 'sync'
+        raise "sync do_verify() failed" unless do_verify(callback, data)
+        state = 0
+      end
+  
+      # Add subscription
+      # subscribe/unsubscribe to/from ALL channels with that topic
+      cb =  WebGlue::Topic.to_hash(callback)
+      if mode == 'subscribe'
+        unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
+          raise "DB insert failed" unless DB[:subscriptions] << {
+            :topic_id => tp[:id], :callback => cb, :vtoken => vtoken, :state => state }
+        end
+        throw :halt, [202, "202 Scheduled for verification"] if verify == 'async'
+      else # mode = 'unsubscribe'
+        DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).delete
+      end
+      throw :halt, [204, "204 No Content"]
+    rescue Exception => e
+      throw :halt, [409, "Subscription verification failed: #{e.to_s}"]
+    end
+  end
+
 end
 
-# Publishers registering new topics here
+# Debug registering new topics
 get '/publish' do
   erb :publish
 end
 
-# Publishers pinging this URL, when there is new content
-post '/publish' do
-  unless params['hub.mode'] and params['hub.url'] and params['hub.mode'] == 'publish'
-    throw :halt, [400, "Bad request: Expected 'hub.mode=publish' and 'hub.url'"]
-  end 
-  throw :halt, [400, "Bad request: Empty 'hub.url' parameter"] if params['hub.url'].empty?
-  begin 
-    hash = WebGlue::Topic.to_hash(params['hub.url'])
-    topic = DB[:topics].filter(:url => hash)
-    if topic.first # already registered
-      # minimum 5 min interval between pings
-      time_diff = (Time.now - topic.first[:updated]).to_i
-      throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
-      topic.update(:updated => Time.now)
-      subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id])
-      urls = subscribers.collect { |u| WebGlue::Topic.to_url(u[:callback]) }
-      atom_diff = WebGlue::Topic.diff(params['hub.url'], true)
-      postman(urls, atom_diff) if (urls.length > 0 and atom_diff)
-    else  
-      DB[:topics] << { :url => hash, :created => Time.now, :updated => Time.now }
-    end
-    throw :halt, [204, "204 No Content"]
-  rescue Exception => e
-    throw :halt, [404, e.to_s]
-  end
-end
-
-# Subscribe to PubSubHubbub
+# Debug subscribe to PubSubHubbub
 get '/subscribe' do
   erb :subscribe
 end
 
-post '/subscribe' do
-  mode     = params['hub.mode']
-  callback = params['hub.callback']
-  topic    = params['hub.topic']
-  verify   = params['hub.verify']
-  vtoken   = params['hub.verify_token']
-  unless mode and callback and topic and verify
-    throw :halt, [400, "Bad request: Expected 'hub.mode', 'hub.callback', 'hub.topic', and 'hub.verify'"]
+# Main hub endpoint for both publisher and subscribers
+post '/' do
+  throw :halt, [400, "Bad request, missing 'hub.mode' parameter"] unless params['hub.mode']
+  if params['hub.mode'] == 'publish'
+    do_publish(params)
+  elsif params['hub.mode'] == 'subscribe'
+    do_subscribe(params)
+  else  
+    throw :halt, [400, "Bad request, unknown 'hub.mode' parameter"]
   end
-  throw :halt, [400, "Bad request: Empty 'hub.callback' or 'hub.topic'"]  if callback.empty? or topic.empty?
-  throw :halt, [400, "Bad request: Unrecognized mode"] unless ['subscribe', 'unsubscribe'].include?(mode)
-  
-  # For now, only using the first preference of verify mode 
-  verify = verify.split(',').first 
-  # throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
-  # will support only 'sync' mode for now
-  throw :halt, [400, "Bad request: Unrecognized verification mode"] unless verify == 'sync'
-  begin
-    hash =  WebGlue::Topic.to_hash(topic)
-    tp =  DB[:topics].filter(:url => hash).first
-    throw :halt, [404, "Not Found"] unless tp[:id]
-    
-    state = (verify == 'async') ? 1 : 0
-    data = { :mode => mode, :verify => verify, :vtoken => vtoken, :topic => topic }
-    if verify == 'sync'
-      raise "sync do_verify() failed" unless do_verify(callback, data)
-      state = 0
-    end
-
-    # Add subscription
-    # subscribe/unsubscribe to/from ALL channels with that topic
-    cb =  WebGlue::Topic.to_hash(callback)
-    if mode == 'subscribe'
-      unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
-        raise "DB insert failed" unless DB[:subscriptions] << {
-          :topic_id => tp[:id], :callback => cb, :vtoken => vtoken, :state => state }
-      end
-      throw :halt, [202, "202 Scheduled for verification"] if verify == 'async'
-    else # mode = 'unsubscribe'
-      DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).delete
-    end
-
-  rescue Exception => e
-    throw :halt, [409, "Subscription verification failed: #{e.to_s}"]
-  end
-  status 204
-  "204 No Content"
 end
