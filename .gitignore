@@ -4,3 +4,4 @@
 *.log
 *.db
 backup
+feeds/*.yml

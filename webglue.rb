@@ -5,6 +5,7 @@ require 'zlib'
 require 'json'
 require 'crack'
 require 'httpclient'
+require 'atom'
 
 begin
   require 'system_timer'
@@ -14,7 +15,10 @@ rescue
   MyTimer = Timeout
 end
 
+require 'topics'
+
 configure do
+  GIVEUP = 10
   DB = Sequel.connect(ENV['DATABASE_URL'] || 'sqlite://webglue.db')
 
   unless DB.table_exists? "topics"
@@ -49,14 +53,6 @@ helpers do
     Zlib.crc32(base + salt).to_s(36)
   end
 
-  def url2hash(url)
-    [url].pack("m*").strip!
-  end
-
-  def hash2url(hash)
-    hash.unpack("m")[0]
-  end
-
   def atom_time(date)
     date.getgm.strftime("%Y-%m-%dT%H:%M:%SZ")
   end
@@ -75,8 +71,26 @@ helpers do
     r
   end
 
+  # post a message to a list of subscribers (urls)
+  def postman(subs, msg)
+    subs.each do |sub|
+      begin
+        MyTimer.timeout(GIVEUP) do
+          HTTPClient.post(sub, msg)
+        end
+      rescue Exception => e
+        case e
+          when Timeout::Error
+            puts "Timeout: #{sub}"
+          else  
+            puts e.to_s
+        end  
+        next
+      end
+    end
+  end
+
   # verify subscribers callback
-  # TODO: use it in /hub/subscribe
   def do_verify(url, data)
     return false unless url and data
     begin
@@ -85,11 +99,12 @@ helpers do
                 'hub.topic' => data[:topic],
                 'hub.challenge' => challenge,
                 'hub.verify_token' => data[:vtoken]}
-      MyTimer.timeout(5) do
+      MyTimer.timeout(GIVEUP) do
          res = HTTPClient.get_content(url, query)
          return false unless res and res == challenge
       end
-    rescue
+    rescue Exception => e
+      puts e.to_s
       return false
     end  
     return true
@@ -109,13 +124,19 @@ post '/publish' do
   end 
   throw :halt, [400, "Bad request: Empty 'hub.url' parameter"] if params['hub.url'].empty?
   begin 
-    hash = url2hash(params['hub.url'])
+    hash = WebGlue::Topic.to_hash(params['hub.url'])
     topic = DB[:topics].filter(:url => hash)
     if topic.first # already registered
+      # minimum 5 min interval between pings
+      time_diff = (Time.now - topic.first[:updated]).to_i
+      throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
       topic.update(:updated => Time.now)
-      # TODO: find the differences from the previous feed fetch
+      subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id])
+      urls = subscribers.collect { |u| WebGlue::Topic.to_url(u[:callback]) }
+      atom_diff = WebGlue::Topic.diff(params['hub.url'], true)
+      postman(urls, atom_diff) if (urls.length > 0 and atom_diff)
     else  
-      DB[:topics] << { :url => hash, :created => Time.now }
+      DB[:topics] << { :url => hash, :created => Time.now, :updated => Time.now }
     end
     throw :halt, [204, "204 No Content"]
   rescue Exception => e
@@ -142,25 +163,26 @@ post '/subscribe' do
   
   # For now, only using the first preference of verify mode 
   verify = verify.split(',').first 
-  throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
+  # throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
+  # will support anly 'sync' mode for now
+  throw :halt, [400, "Bad request: Unrecognized verification mode"] unless verify == 'sync'
   begin
-    hash = url2hash(topic)
+    hash =  WebGlue::Topic.to_hash(topic)
     tp =  DB[:topics].filter(:url => hash).first
     throw :halt, [404, "Not Found"] unless tp[:id]
     
     state = (verify == 'async') ? 1 : 0
     data = { :mode => mode, :verify => verify, :vtoken => vtoken, :topic => topic }
     if verify == 'sync'
-      # raise "sync do_verify() failed" unless do_verify(callback, data)
+      raise "sync do_verify() failed" unless do_verify(callback, data)
       state = 0
     end
 
     # Add subscription
     # subscribe/unsubscribe to/from ALL channels with that topici
-    cb = url2hash(callback)
+    cb =  WebGlue::Topic.to_hash(callback)
     if mode == 'subscribe'
       unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
-        puts "callback: #{cb}"
         raise "DB insert failed" unless DB[:subscriptions] << {
           :topic_id => tp[:id], :callback => cb, :vtoken => vtoken, :state => state }
       end
