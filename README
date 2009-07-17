@@ -1,0 +1,109 @@
+WebGlue
+========
+
+  PubSubHubbub Ruby implementation
+
+
+Overview
+---------
+
+PubSubHubbub (PSHB) is a simple, open, server-to-server web-hook-based pubsub 
+(publish/subscribe) protocol as an extension to Atom. For more details see
+http://code.google.com/p/pubsubhubbub/ . 
+Current project is as simple as possible implementation in Ruby of PSHB-compatible hub.
+
+Implemented features:
+
+ - Publishing new topics (Atom Feeds)
+ - Subscriptions to existing topics (including callbacks verification)
+ - Fetching atom feeds, finding the new entries and sending them to all subscribers
+ 
+Still missing (not implemented):
+
+ - Only 'sync' verification mode is supported
+ - Publishers need to manually ping the hub (no automatic check for updated feeds)
+ - Can only process Atom feeds, not RSS
+ - HMAC
+
+
+Required gems
+--------------
+
+ - sinatra - web framework - routing etc.
+ - httpclient - POST requests, callbacks verification
+ - crack - XML parsing
+ - ratom - Atom feeds fetching/parsing
+ - SystemTimer - for timeouts on unsuccessful requests
+
+If you are using http://heroku.com/ for deployment, your '.gems' file will look like:
+
+  httpclient
+  SystemTimer
+  crack
+  ratom
+
+
+Runing
+------
+
+The whole system is implemented like a sinatra [ http://www.sinatrarb.com/ ] application. 
+To start it locally (on port 4567 for example):
+
+  git clone git://github.com/zh/webglue.git   
+  cd webglue
+  rackup -p 4567
+
+http://heroku.com/ will automaticaly recognize tartup file and run your application on
+deployment:
+
+  git clone git://github.com/zh/webglue.git
+  cd webglue
+  heroku create mypubhub
+  git push heroku master
+
+
+Publishing new topics
+----------------------
+
+If your application is running on URL http://localhost:4567/ , go to 
+http://localhost:4567/publish and insert your Atom feed in the 'Topic:' text box. Press
+"Publish". There will be no changes on the screen, because the hub is responding with
+HTTP code 204 "No Content".
+
+You are also POST directly to http://localhost:4567/publish with parameters, described
+in the "PubSubHubbub Core 0.1" document - 
+http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.1.html
+
+For now there is no automatic check for updated feeds implemented, so after changes in
+some feed, repeat the actions, described above (from the web form or via POST).
+Publishing is possible once every 5 min.
+
+
+Subscription to existing topics
+--------------------------------
+
+If your application is running on URL http://localhost:4567/ , go to
+http://localhost:4567/subscribe and fill the web form:
+
+ - Callback - URL to the webhook, which will receive Atom-formated notifications
+ - Topic - atom feed URL, ALREADY PUBLISHED to the system - see 'Publishing new topics' 
+   above
+ - Verify mode - only 'Synchronous' mode is supported for now
+ - Mode - 'Subscribe' for adding new subscribers and 'Unsubscribe' for removing 
+   already inserted
+ - Verify token - something that your callback need to approve
+
+The hub is implementing callbacks verification, described in the "PubSubHubbub Core 0.1" 
+document (sending back 'hub.challenge' parameter in the response body).
+There will be no changes on the screen after subscription,  because the hub is responding 
+with HTTP code 204 "No Content".
+
+
+Notifications format
+---------------------
+
+Current implementation fetch the Atom feed and just remove already known entries from it,
+without touching other parts of the feed ('title', 'id', 'author' etc.). After that, the
+feed, with only new entries in it is resend to all topic's subscribers. Because of that,
+the hub cannot process RSS feeds and have some problems with non-well formated feeds.
+If try to fix this in the future releases. 
