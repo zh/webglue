@@ -49,9 +49,11 @@ module WebGlue
           foreign_key :topic_id
           varchar     :callback, :size => 128
           varchar     :vtoken, :size => 32
+          varchar     :vmode, :size => 32    # 'sync' or 'async'
           integer     :state, :default => 0  # 0 - verified, 1 - need verification
           time        :created
           index       [:created] 
+          index       [:vmode] 
           index       [:topic_id, :callback], :unique => true
         end
       end
@@ -112,7 +114,7 @@ module WebGlue
           if topic.first # already registered
             # minimum 5 min interval between pings
             time_diff = (Time.now - topic.first[:updated]).to_i
-            #throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+            throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
             topic.update(:updated => Time.now)
             subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id])
             urls = subscribers.collect { |u| WebGlue::Topic.to_url(u[:callback]) }
@@ -169,7 +171,7 @@ module WebGlue
           if mode == 'subscribe'
             unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
               raise "DB insert failed" unless DB[:subscriptions] << {
-                :topic_id => tp[:id], :callback => cb, :vtoken => vtoken, :state => state }
+                :topic_id => tp[:id], :callback => cb, :vtoken => vtoken, :vmode => verify, :state => state }
             end
             throw :halt, [202, "202 Scheduled for verification"] if verify == 'async'
           else # mode = 'unsubscribe'
