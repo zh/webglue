@@ -24,17 +24,15 @@ end
 
 module WebGlue
 
-  FEEDS_DIR=(File.join(File.dirname(__FILE__), 'feeds')).freeze
+  class Config
+    FEEDS_DIR=(File.join(File.dirname(__FILE__), 'feeds')).freeze
+  end  
 
   class InvalidTopicException < Exception; end
 
   class Topic
 
     attr_reader  :entries
-
-    def Topic.feeds_dir()
-      return FEEDS_DIR
-    end  
 
     def Topic.to_hash(url)
       [url].pack("m*").strip!
@@ -48,7 +46,7 @@ module WebGlue
       raise InvalidTopicException unless url
       feed = nil
       begin
-        MyTimer.timeout(GIVEUP) do
+        MyTimer.timeout(Config::GIVEUP) do
           feed = Atom::Feed.load_feed(URI.parse(url))
         end
       rescue
@@ -59,7 +57,7 @@ module WebGlue
     end
 
     def Topic.load_file(hash)
-      path = File.join(FEEDS_DIR,"#{hash}.yml")
+      path = File.join(Config::FEEDS_DIR,"#{hash}.yml")
       raise InvalidTopicException unless File.exists?(path)
       return YAML::load_file(path)
     end  
@@ -73,7 +71,7 @@ module WebGlue
     def Topic.save!(url, feed)
       raise InvalidTopicException unless (url and feed)
       h = Topic.to_hash(url)
-      File.open(File.join(FEEDS_DIR,"#{h}.yml"), "w") do |out|
+      File.open(File.join(Config::FEEDS_DIR,"#{h}.yml"), "w") do |out|
         YAML::dump(feed, out)
       end  
     end
@@ -90,7 +88,7 @@ module WebGlue
 
       new_feed = nil
       begin
-        MyTimer.timeout(GIVEUP) do
+        MyTimer.timeout(Config::GIVEUP) do
           new_feed = Atom::Feed.load_feed(URI.parse(url))
         end
       rescue Exception => e
