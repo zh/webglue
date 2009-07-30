@@ -43,7 +43,7 @@ If you are using http://heroku.com/ for deployment, your '.gems' file will look 
   ratom
 
 
-Runing
+Running
 ------
 
 The whole system is implemented as a Sinatra [ http://www.sinatrarb.com/ ] application. 
@@ -52,6 +52,24 @@ To start it locally (on port 4567 for example):
   git clone git://github.com/zh/webglue.git   
   cd webglue
   rackup -p 4567
+
+(optional)
+
+'async' verification worker process:
+
+- from crontab:
+
+  require 'worker'
+  WebGlue::Worker.verify
+
+- independent daemon (checks every WebGlue::Config.CHECK minutes)
+
+  require 'worker'
+  WebGlue::Worker.run
+
+Or you can uncomment the proper lines in worker.rb ('if __FILE__ == $0' block) and do
+
+  ruby worker.rb
 
 http://heroku.com/ will automatically recognize the startup file (config.ru) and will 
 run your application after the deployment:
@@ -101,9 +119,9 @@ http://localhost:4567/subscribe and fill the web form:
  - Callback - URL to the webhook, which will receive Atom-formated notifications
  - Topic - Atom feed URL, ALREADY PUBLISHED to the system - see 'Publishing new topics' 
    above
- - Verify mode - only 'Synchronous' mode is supported for now
+ - Verify mode - Both 'Synchronous' and 'Asynchronous' modes supported
  - Mode - 'Subscribe' for adding new subscribers and 'Unsubscribe' for removing 
-   already inserted
+   the already inserted onces
  - Verify token - something that your callback need to approve
 
 You can send also POST subscription requests with the required parameters directly to
@@ -111,8 +129,9 @@ the hub endpoint (http://localhost:4567/ in our example).
 
 The hub is implementing callbacks verification, described in the "PubSubHubbub Core 0.1" 
 document (sending back 'hub.challenge' parameter in the response body).
-There will be no changes on the screen after subscription,  because the hub is responding 
-with HTTP code 204 "No Content".
+In 'Synchronous' mode there will be no changes on the screen after subscription,  
+because the hub is responding with HTTP code 204 "No Content".
+In 'Asynchronous' mode the hub will respond with HTTP code 202 "Scheduled for verification"
 
 
 Notifications format

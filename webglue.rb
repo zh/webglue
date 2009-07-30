@@ -19,10 +19,6 @@ require 'topics'
 
 module WebGlue
 
-  class Config
-    GIVEUP = 10
-  end  
-
   class App < Sinatra::Default
   
     set :sessions, false
@@ -92,12 +88,14 @@ module WebGlue
               HTTPClient.post(sub, msg)
             end
           rescue Exception => e
-            case e
-              when Timeout::Error
-                puts "Timeout: #{sub}"
-              else  
-                puts e.to_s
-            end  
+            if Config::DEBUG == true
+              case e
+                when Timeout::Error
+                  puts "Timeout: #{sub}"
+                else  
+                  puts e.to_s 
+              end
+            end 
             next
           end
         end
@@ -109,16 +107,17 @@ module WebGlue
           throw :halt, [400, "Bad request: Empty or missing 'hub.url' parameter"]
         end
         begin 
-          hash = WebGlue::Topic.to_hash(params['hub.url'])
+          hash = Topic.to_hash(params['hub.url'])
           topic = DB[:topics].filter(:url => hash)
           if topic.first # already registered
             # minimum 5 min interval between pings
             time_diff = (Time.now - topic.first[:updated]).to_i
             throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
             topic.update(:updated => Time.now)
-            subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id])
-            urls = subscribers.collect { |u| WebGlue::Topic.to_url(u[:callback]) }
-            atom_diff = WebGlue::Topic.diff(params['hub.url'], true)
+            # only verified subscribers, subscribed to that topic
+            subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id], :state => 0)
+            urls = subscribers.collect { |u| Topic.to_url(u[:callback]) }
+            atom_diff = Topic.diff(params['hub.url'], true)
             postman(urls, atom_diff) if (urls.length > 0 and atom_diff)
           else  
             DB[:topics] << { :url => hash, :created => Time.now, :updated => Time.now }
@@ -144,11 +143,9 @@ module WebGlue
         
         # For now, only using the first preference of verify mode 
         verify = verify.split(',').first 
-        # throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
-        # will support only 'sync' mode for now
-        throw :halt, [400, "Bad request: Unrecognized verification mode"] unless verify == 'sync'
+        throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
         begin
-          hash =  WebGlue::Topic.to_hash(topic)
+          hash =  Topic.to_hash(topic)
           tp =  DB[:topics].filter(:url => hash).first
           throw :halt, [404, "Not Found"] unless tp[:id]
           
@@ -167,7 +164,7 @@ module WebGlue
       
           # Add subscription
           # subscribe/unsubscribe to/from ALL channels with that topic
-          cb =  WebGlue::Topic.to_hash(callback)
+          cb =  Topic.to_hash(callback)
           if mode == 'subscribe'
             unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
               raise "DB insert failed" unless DB[:subscriptions] << {
