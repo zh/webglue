@@ -184,7 +184,6 @@ module WebGlue
           # Add subscription
           # subscribe/unsubscribe to/from ALL channels with that topic
           cb =  DB[:subscriptions].filter(:topic_id => tp[:id], :callback => Topic.to_hash(callback))
-          p "count: #{cb.count}"
           cb.delete if (mode == 'unsubscribe' or cb.first)
           if mode == 'subscribe'
             raise "DB insert failed" unless DB[:subscriptions] << {
