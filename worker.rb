@@ -56,6 +56,7 @@ module WebGlue
         topic = Topic.to_url(topic[:url]) if topic
         query = { 'hub.mode' => sub[:vmode],
                   'hub.topic' => topic,
+                  'hub.lease_seconds' => 0,  # still no subscription refreshing support
                   'hub.challenge' => self.gen_id,
                   'hub.verify_token' => sub[:vtoken]}
         EM.spawn do

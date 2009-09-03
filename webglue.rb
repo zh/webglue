@@ -6,6 +6,7 @@ require 'json'
 require 'crack'
 require 'httpclient'
 require 'atom'
+require 'hmac-sha1'
 
 begin
   require 'system_timer'
@@ -31,10 +32,12 @@ module WebGlue
       unless DB.table_exists? "topics"
         DB.create_table :topics do
           primary_key :id
-          varchar     :url, :size => 128
+          varchar     :url, :size => 256
           time        :created
           time        :updated
+          integer     :dirty, :default => 1  # 0 - no changes, 1 - need resync
           index       [:updated] 
+          index       [:dirty] 
           index       [:url], :unique => true
         end
       end
@@ -43,8 +46,9 @@ module WebGlue
         DB.create_table :subscriptions do
           primary_key :id
           foreign_key :topic_id
-          varchar     :callback, :size => 128
-          varchar     :vtoken, :size => 32
+          varchar     :callback, :size => 256
+          varchar     :vtoken, :size => 64
+          varchar     :secret, :size => 64
           varchar     :vmode, :size => 32    # 'sync' or 'async'
           integer     :state, :default => 0  # 0 - verified, 1 - need verification
           time        :created
@@ -84,8 +88,15 @@ module WebGlue
       def postman(subs, msg)
         subs.each do |sub|
           begin
+            url = Topic.to_url(sub[:callback])
+            extheaders = {}
+            unless sub[:secret].empty?
+              sig = HMAC::SHA1.hexdigest(sub[:secret], msg)
+              extheaders = { 'X-Hub-Signature' => "sha1=#{sig}" }
+            end  
             MyTimer.timeout(Config::GIVEUP) do
-              HTTPClient.post(sub, msg)
+              p "sign: url=#{url}, sha1=#{sig}"
+              HTTPClient.post(url, msg, extheaders)
             end
           rescue Exception => e
             if Config::DEBUG == true
@@ -106,19 +117,20 @@ module WebGlue
         unless params['hub.url'] and not params['hub.url'].empty?
           throw :halt, [400, "Bad request: Empty or missing 'hub.url' parameter"]
         end
-        begin 
+        begin
+          # TODO: move the subscribers notifications to some background job (worker?)
           hash = Topic.to_hash(params['hub.url'])
           topic = DB[:topics].filter(:url => hash)
           if topic.first # already registered
             # minimum 5 min interval between pings
             time_diff = (Time.now - topic.first[:updated]).to_i
-            throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
-            topic.update(:updated => Time.now)
+            #throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+            topic.update(:updated => Time.now, :dirty => 1)
             # only verified subscribers, subscribed to that topic
             subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id], :state => 0)
-            urls = subscribers.collect { |u| Topic.to_url(u[:callback]) }
             atom_diff = Topic.diff(params['hub.url'], true)
-            postman(urls, atom_diff) if (urls.length > 0 and atom_diff)
+            postman(subscribers, atom_diff) if (subscribers.count > 0 and atom_diff)
+            topic.update(:dirty => 0)
           else  
             DB[:topics] << { :url => hash, :created => Time.now, :updated => Time.now }
           end
@@ -138,8 +150,14 @@ module WebGlue
         unless callback and topic and verify
           throw :halt, [400, "Bad request: Expected 'hub.callback', 'hub.topic', and 'hub.verify'"]
         end
-        throw :halt, [400, "Bad request: Empty 'hub.callback' or 'hub.topic'"]  if callback.empty? or topic.empty?
+        throw :halt, [400, "Bad request: Empty 'hub.callback' or 'hub.topic'"]  if (callback.empty? or topic.empty?)
+        # anchor part in the url not allowed by the spec
+        throw :halt, [400, "Bad request: Invalid URL"] if (callback.include?('#') or topic.include?('#'))
+        
         throw :halt, [400, "Bad request: Unrecognized mode"] unless ['subscribe', 'unsubscribe'].include?(mode)
+
+        # Processing optional secret
+        secret = params['hub.secret'] ? params['hub.secret'] : ''
         
         # For now, only using the first preference of verify mode 
         verify = verify.split(',').first 
@@ -152,6 +170,7 @@ module WebGlue
           state = (verify == 'async') ? 1 : 0
           query = { 'hub.mode' => mode,
                     'hub.topic' => topic,
+                    'hub.lease_seconds' => 0,  # still no subscription refreshing support
                     'hub.challenge' => gen_id,
                     'hub.verify_token' => vtoken}
           if verify == 'sync'
@@ -164,15 +183,14 @@ module WebGlue
       
           # Add subscription
           # subscribe/unsubscribe to/from ALL channels with that topic
-          cb =  Topic.to_hash(callback)
+          cb =  DB[:subscriptions].filter(:topic_id => tp[:id], :callback => Topic.to_hash(callback))
+          p "count: #{cb.count}"
+          cb.delete if (mode == 'unsubscribe' or cb.first)
           if mode == 'subscribe'
-            unless DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).first
-              raise "DB insert failed" unless DB[:subscriptions] << {
-                :topic_id => tp[:id], :callback => cb, :vtoken => vtoken, :vmode => verify, :state => state }
-            end
+            raise "DB insert failed" unless DB[:subscriptions] << {
+              :topic_id => tp[:id], :callback => Topic.to_hash(callback), 
+              :vtoken => vtoken, :vmode => verify, :secret => secret, :state => state }
             throw :halt, [202, "202 Scheduled for verification"] if verify == 'async'
-          else # mode = 'unsubscribe'
-            DB[:subscriptions].filter(:topic_id => tp[:id], :callback => cb).delete
           end
           throw :halt, [204, "204 No Content"]
         rescue Exception => e
