@@ -124,7 +124,7 @@ module WebGlue
           if topic.first # already registered
             # minimum 5 min interval between pings
             time_diff = (Time.now - topic.first[:updated]).to_i
-            #throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+            throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
             topic.update(:updated => Time.now, :dirty => 1)
             # only verified subscribers, subscribed to that topic
             subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id], :state => 0)
