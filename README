@@ -10,20 +10,21 @@ Overview
 PubSubHubbub (PSHB) is a simple, open, server-to-server web-hook-based pubsub 
 (publish/subscribe) protocol as an extension to Atom. For more details see
 http://code.google.com/p/pubsubhubbub/ . 
-Current project is as simple as possible implementation in Ruby of PSHB-compatible hub.
+Current project is as simple as possible implementation in Ruby of PSHB Core 2.0 
+Draft-compatible hub.
 
 Implemented features:
 
  - Publishing new topics (Atom Feeds)
- - Subscriptions to existing topics (including callbacks verification)
+ - Subscriptions to existing topics (including callbacks verification) - 'sync' and
+   'async' mode verifications
  - Fetching atom feeds, finding the new entries and sending them to all subscribers
+ - Authenticated Content Distribution - 'hub.secret'
  
 Still missing (not implemented):
 
- - Only 'sync' verification mode is supported
  - Publishers need to manually ping the hub (no automatic check for updated feeds)
  - Can only process Atom feeds, not RSS
- - HMAC
 
 
 Required gems
@@ -34,6 +35,7 @@ Required gems
  - crack - XML parsing
  - ratom - Atom feeds fetching/parsing
  - SystemTimer - for timeouts on unsuccessful requests
+ - ruby-hmac - HMAC-SHA1 for content digests
 
 If you are using http://heroku.com/ for deployment, your '.gems' file will look like:
 
@@ -41,6 +43,7 @@ If you are using http://heroku.com/ for deployment, your '.gems' file will look 
   SystemTimer
   crack
   ratom
+  ruby-hmac
 
 
 Running
@@ -98,8 +101,8 @@ http://localhost:4567/publish and insert your Atom feed in the 'Topic:' text box
 HTTP code 204 "No Content".
 
 You can also POST directly to http://localhost:4567/ with parameters, described
-in the "PubSubHubbub Core 0.1" document - 
-http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.1.html
+in the "PubSubHubbub Core 0.2" document - 
+http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html
 
 Also in your feed, insert the line:
 
@@ -123,11 +126,12 @@ http://localhost:4567/subscribe and fill the web form:
  - Mode - 'Subscribe' for adding new subscribers and 'Unsubscribe' for removing 
    the already inserted onces
  - Verify token - something that your callback need to approve
+ - Secret - used to compute an HMAC digest of the content, send to the subscriber
 
 You can send also POST subscription requests with the required parameters directly to
 the hub endpoint (http://localhost:4567/ in our example).
 
-The hub is implementing callbacks verification, described in the "PubSubHubbub Core 0.1" 
+The hub is implementing callbacks verification, described in the "PubSubHubbub Core 0.2" 
 document (sending back 'hub.challenge' parameter in the response body).
 In 'Synchronous' mode there will be no changes on the screen after subscription,  
 because the hub is responding with HTTP code 204 "No Content".
@@ -141,4 +145,7 @@ Current implementation fetch the Atom feeds and just remove already known entrie
 them, without touching other parts of the feed ('title', 'id', 'author' etc.). 
 After that, the feed, with only new entries in it is resend to all topic's subscribers. 
 Because of that, the hub cannot process RSS feeds and may have some problems with 
-non-well formated feeds. I'll try to fix this in the future releases. 
+non-well formated feeds. I'll try to fix this in the future releases.
+If the subscriber supplied a value for 'hub.secret' in their subscription request, 
+the hub will generate an HMAC signature of the payload and include that signature in 
+the response headers ('X-Hub-Signature') of the notification.
