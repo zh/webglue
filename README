@@ -10,7 +10,7 @@ Overview
 PubSubHubbub (PSHB) is a simple, open, server-to-server web-hook-based pubsub 
 (publish/subscribe) protocol as an extension to Atom. For more details see
 http://code.google.com/p/pubsubhubbub/ . 
-Current project is as simple as possible implementation in Ruby of PSHB Core 2.0 
+Current project is as simple as possible implementation in Ruby of PSHB Core 0.2 
 Draft-compatible hub.
 
 Implemented features:
