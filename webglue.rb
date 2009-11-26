@@ -214,7 +214,7 @@ module WebGlue
       throw :halt, [400, "Bad request, missing 'hub.mode' parameter"] unless params['hub.mode']
       if params['hub.mode'] == 'publish'
         do_publish(params)
-      elsif params['hub.mode'] == 'subscribe'
+      elsif params['hub.mode'] == 'subscribe' or params['hub.mode'] == 'unsubscribe'
         do_subscribe(params)
       else  
         throw :halt, [400, "Bad request, unknown 'hub.mode' parameter"]
