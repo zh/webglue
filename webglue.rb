@@ -114,6 +114,7 @@ module WebGlue
     
       # Publishers pinging this URL, when there is new content
       def do_publish(params)
+        content_type 'text/plain', :charset => 'utf-8'
         unless params['hub.url'] and not params['hub.url'].empty?
           throw :halt, [400, "Bad request: Empty or missing 'hub.url' parameter"]
         end
@@ -123,8 +124,8 @@ module WebGlue
           topic = DB[:topics].filter(:url => hash)
           if topic.first # already registered
             # minimum 5 min interval between pings
-            time_diff = (Time.now - topic.first[:updated]).to_i
-            throw :halt, [200, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+            #time_diff = (Time.now - topic.first[:updated]).to_i
+            #throw :halt, [204, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
             topic.update(:updated => Time.now, :dirty => 1)
             # only verified subscribers, subscribed to that topic
             subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id], :state => 0)
@@ -147,6 +148,8 @@ module WebGlue
         topic    = params['hub.topic']
         verify   = params['hub.verify']
         vtoken   = params['hub.verify_token']
+        
+        content_type 'text/plain', :charset => 'utf-8'
         unless callback and topic and verify
           throw :halt, [400, "Bad request: Expected 'hub.callback', 'hub.topic', and 'hub.verify'"]
         end
@@ -158,10 +161,13 @@ module WebGlue
 
         # Processing optional secret
         secret = params['hub.secret'] ? params['hub.secret'] : ''
-        
-        # For now, only using the first preference of verify mode 
-        verify = verify.split(',').first 
-        throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
+       
+        # remove invalid verify modes 
+        verify = Array(verify.split(',')).delete_if { |x| not ['sync','async'].include?(x) }
+        throw :halt, [400, "Bad request: Unrecognized verification mode"] if verify.empty?
+        # For now, only using the first preference of verify mode
+        verify = verify[0]
+        #throw :halt, [400, "Bad request: Unrecognized verification mode"] unless ['sync', 'async'].include?(verify)
         begin
           hash =  Topic.to_hash(topic)
           tp =  DB[:topics].filter(:url => hash).first
@@ -208,9 +214,10 @@ module WebGlue
     get '/subscribe' do
       erb :subscribe
     end
-    
+
     # Main hub endpoint for both publisher and subscribers
     post '/' do
+      content_type 'text/plain', :charset => 'utf-8'
       throw :halt, [400, "Bad request, missing 'hub.mode' parameter"] unless params['hub.mode']
       if params['hub.mode'] == 'publish'
         do_publish(params)
