@@ -177,12 +177,13 @@ module WebGlue
           query = { 'hub.mode' => mode,
                     'hub.topic' => topic,
                     'hub.lease_seconds' => 0,  # still no subscription refreshing support
-                    'hub.challenge' => gen_id,
-                    'hub.verify_token' => vtoken}
+                    'hub.challenge' => gen_id}
+          query['hub.verify_token'] = vtoken if vtoken
           if verify == 'sync'
             MyTimer.timeout(Config::GIVEUP) do
               res = HTTPClient.get_content(callback, query)
-              raise "do_verify(#{callback})" unless res and res == query['hub.challenge']
+              opts = "m=#{mode} c=#{callback} t=#{topic} v=#{verify} -> res=#{res.inspect}"
+              raise "do_verify(#{opts})" unless res and res == query['hub.challenge']
             end
             state = 0
           end
@@ -195,9 +196,9 @@ module WebGlue
             raise "DB insert failed" unless DB[:subscriptions] << {
               :topic_id => tp[:id], :callback => Topic.to_hash(callback), 
               :vtoken => vtoken, :vmode => verify, :secret => secret, :state => state }
-            throw :halt, [202, "202 Scheduled for verification"] if verify == 'async'
           end
-          throw :halt, [204, "204 No Content"]
+          throw :halt, verify == 'async' ? [202, "202 Scheduled for verification"] : 
+                                           [204, "204 No Content"]
         rescue Exception => e
           throw :halt, [409, "Subscription verification failed: #{e.to_s}"]
         end

@@ -57,8 +57,8 @@ module WebGlue
         query = { 'hub.mode' => sub[:vmode],
                   'hub.topic' => topic,
                   'hub.lease_seconds' => 0,  # still no subscription refreshing support
-                  'hub.challenge' => self.gen_id,
-                  'hub.verify_token' => sub[:vtoken]}
+                  'hub.challenge' => self.gen_id }
+        query['hub.verify_token'] = sub[:vtoken] if sub[:vtoken]
         EM.spawn do
           client = Client.new
           client.callback do
