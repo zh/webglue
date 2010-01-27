@@ -206,6 +206,10 @@ module WebGlue
     
     end
     
+    get '/' do
+      erb :index
+    end
+
     # Debug registering new topics
     get '/publish' do
       erb :publish

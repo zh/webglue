@@ -1,0 +1,59 @@
+<html>
+<head>
+  <title>Webglue PubSubHubbub ruby implementation</title>
+  <link rel="stylesheet" href="/css/hub.css" type="text/css" media="screen" />
+</head>
+<body>
+
+<h1>PubSubHubbub</h1>
+
+<p>This is the URL of the <b>Webglue PubSubhubbub hub</b>.</p>
+
+<p>PubSubHubbub is an open protocol for distributed Publish/Subscribe communication on the internet.
+Parties (servers) speaking the <a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html">PubSubHubbub protocol</a> can get near-instant notifications (via webhook callbacks) when a topic (feed URL) 
+they're interested in is updated.</p>
+
+<p>Decentralized and free. Anybody can run a PubSubHubbub server or anybody can use an open server. </p>
+
+<h1>Current Implementation</h1>
+
+<p><a href="http://github.com/zh/webglue">Webglue</a> is as simple as possible implementation 
+in Ruby of <a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html">PSHB Core 0.2 Draft-compatible</a> hub.
+
+<h2>Implemented features</h2>
+
+<ul>
+  <li>Publishing new topics (Atom Feeds)</li>
+  <li>Subscriptions to existing topics (including callbacks verification) - 'sync' and 'async' mode verifications</li>
+  <li>Fetching atom feeds, finding the new entries and sending them to all subscribers</li>
+  <li>Authenticated Content Distribution - 'hub.secret'</li>
+</ul>
+
+<h2>Still missing (not implemented)</h2>
+
+<ul>
+  <li>Publishers need to manually ping the hub (no automatic check for updated feeds)</li>
+  <li>Can only process Atom feeds, not RSS</li>
+</ul>
+
+<h2>Hub debug</h2>
+
+From here you can,
+
+<ul>
+  <li><a href="/subscribe">Subscribe</a> to a feed or debug your subscriber.</li>
+  <li><a href="/publish">Publish</a> a feed or debug your published feeds.</li>
+</ul>
+
+<h2>More info</h2>
+
+<ul>
+  <li><a href="http://code.google.com/p/pubsubhubbub/">Specifications</a></li>
+  <li><a href="http://pubsubhubbub.appspot.com/">Demo PubSubHubbub reference Hub server</a></li>
+  <li><a href="http://code.google.com/p/pubsubhubbub/wiki/Hubs">Other hub implementations and hosted services</a></li>
+  <li><a href="http://github.com/zh/webglue">Webglue code on GitHub</a></li>
+</ul>
+
+
+</body>
+</html>
