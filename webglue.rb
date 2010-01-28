@@ -45,6 +45,18 @@ module WebGlue
     end
     
     helpers do
+      def protected!
+        response['WWW-Authenticate'] = %(Basic realm="Protected Area") and \
+        throw(:halt, [401, "Not authorized\n"]) and \
+        return unless authorized?
+      end
+
+      def authorized?
+        @auth ||=  Rack::Auth::Basic::Request.new(request.env)
+        @auth.provided? && @auth.basic? && @auth.credentials && 
+                           @auth.credentials == ['admin', 'secret']
+      end
+
       def gen_id
         base = rand(100000000).to_s
         salt = Time.now.to_s
@@ -195,6 +207,25 @@ module WebGlue
         when 'subscribe', 'unsubscribe' then do_subscribe(params)
         else throw :halt, [400, "Bad request, unknown 'hub.mode' parameter"]
       end  
+    end
+
+    get '/admin' do
+      protected!
+      text  = "<h1>List topics</h1>\n<ul>\n"
+      DB[:topics].each do |topic|
+        text += "<li><b>topic</b>: #{Topic.to_url(topic[:url])}</li>\n"
+        subscribers = DB[:subscriptions].filter(:topic_id => topic[:id])
+        if subscribers.count > 0
+          text += "<ul>\n"
+          subscribers.each do |sub|
+            text += "<li>#{Topic.to_url(sub[:callback])}"
+            text += " <b>(valid)</b>" if sub[:state].to_i == 1
+            text += "</li>\n"
+          end  
+          text += "</ul>\n"
+        end  
+      end  
+      text += "</ul>"
     end
   
   end
