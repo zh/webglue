@@ -219,7 +219,7 @@ module WebGlue
           text += "<ul>\n"
           subscribers.each do |sub|
             text += "<li>#{Topic.to_url(sub[:callback])}"
-            text += " <b>(valid)</b>" if sub[:state].to_i == 1
+            text += " <b>(valid)</b>" if sub[:state].to_i == 0
             text += "</li>\n"
           end  
           text += "</ul>\n"
