@@ -1,21 +1,6 @@
-require 'rubygems'
-require 'sinatra'
-require 'sequel'
-require 'zlib'
-require 'json'
-require 'crack'
-require 'httpclient'
-require 'atom'
-require 'hmac-sha1'
+#!/usr/bin/env ruby
 
-begin
-  require 'system_timer'
-  MyTimer = SystemTimer
-rescue
-  require 'timeout'
-  MyTimer = Timeout
-end
-
+%w{ rubygems sinatra sequel zlib json httpclient atom hmac-sha1 }.each { |lib| require lib }
 require 'topics'
 
 module WebGlue

@@ -1,3 +1,11 @@
+begin
+  require 'system_timer'
+  MyTimer = SystemTimer
+rescue
+  require 'timeout'
+  MyTimer = Timeout
+end
+
 # Small fix for feeds with 'xhtml' type content
 module Atom
   class Content

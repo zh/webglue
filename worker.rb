@@ -1,20 +1,6 @@
-require 'rubygems'
-require 'sequel'
-require 'zlib'
-require 'json'
-require 'crack'
-require 'atom'
-require 'eventmachine'
-require 'httpclient'
+#!/usr/bin/env ruby
 
-begin
-  require 'system_timer'
-  MyTimer = SystemTimer
-rescue
-  require 'timeout'
-  MyTimer = Timeout
-end
-
+%w{ rubygems sequel zlib json httpclient atom eventmachine }.each { |lib| require lib }
 require 'topics'
 
 DB = Sequel.connect(ENV['DATABASE_URL'] || 'sqlite://webglue.db')
@@ -48,7 +34,7 @@ module WebGlue
     end
 
     # spawn a new process for every backend to check
-    def self.verify_all(debug = Config.DEBUG)
+    def self.verify_all(debug = Config::DEBUG)
       subs = DB[:subscriptions].filter(:vmode => 'async', :state => 1)
       subs.each do |sub|
         url = Topic.to_url(sub[:callback])
@@ -63,7 +49,7 @@ module WebGlue
           client = Client.new
           client.callback do
             DB[:subscriptions].filter(:callback => sub[:callback]).update(:state => 0)
-            puts "sucess: #{url}" if debug == true
+            puts "success: #{url}" if debug == true
           end
           client.errback { puts "fail: #{url}" if debug == true }
           client.do_verify(url, query, debug)
@@ -99,6 +85,6 @@ if __FILE__ == $0
   # one time check (cronjob)
   WebGlue::Worker.verify
   
-  # continious working 
+  # continious working
   #WebGlue::Worker.run
 end
