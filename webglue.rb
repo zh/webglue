@@ -66,36 +66,17 @@ module WebGlue
         Zlib.crc32(base + salt).to_s(36)
       end
     
-      def atom_time(date)
-        date.getgm.strftime("%Y-%m-%dT%H:%M:%SZ")
-      end
-    
-      def atom_parse(text)
-        atom = Crack::XML.parse(text)
-        r = []
-        if atom["feed"]["entry"].kind_of?(Array)
-          atom["feed"]["entry"].each { |e| 
-            r << {:id => e["id"], :title => e["title"], :published => e["published"] }
-          }
-        else
-          e = atom["feed"]["entry"]
-          r = {:id => e["id"], :title => e["title"], :published => e["published"] }
-        end
-        r
-      end
-    
       # post a message to a list of subscribers (urls)
       def postman(subs, msg)
+        extheaders = { 'Content-Type' => 'application/atom+xml' }
         subs.each do |sub|
           begin
             url = Topic.to_url(sub[:callback])
-            extheaders = {}
             unless sub[:secret].empty?
-              sig = HMAC::SHA1.hexdigest(sub[:secret], msg)
-              extheaders = { 'X-Hub-Signature' => "sha1=#{sig}" }
+              signature = HMAC::SHA1.hexdigest(sub[:secret], msg)
+              extheaders['X-Hub-Signature'] = "sha1=#{signature}"
             end  
             MyTimer.timeout(Config::GIVEUP) do
-              p "sign: url=#{url}, sha1=#{sig}"
               HTTPClient.post(url, msg, extheaders)
             end
           rescue Exception => e
@@ -124,8 +105,8 @@ module WebGlue
           topic = DB[:topics].filter(:url => hash)
           if topic.first # already registered
             # minimum 5 min interval between pings
-            #time_diff = (Time.now - topic.first[:updated]).to_i
-            #throw :halt, [204, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+            time_diff = (Time.now - topic.first[:updated]).to_i
+            throw :halt, [204, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
             topic.update(:updated => Time.now, :dirty => 1)
             # only verified subscribers, subscribed to that topic
             subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id], :state => 0)
@@ -224,13 +205,11 @@ module WebGlue
     post '/' do
       content_type 'text/plain', :charset => 'utf-8'
       throw :halt, [400, "Bad request, missing 'hub.mode' parameter"] unless params['hub.mode']
-      if params['hub.mode'] == 'publish'
-        do_publish(params)
-      elsif params['hub.mode'] == 'subscribe' or params['hub.mode'] == 'unsubscribe'
-        do_subscribe(params)
-      else  
-        throw :halt, [400, "Bad request, unknown 'hub.mode' parameter"]
-      end
+      case(params['hub.mode'])
+        when 'publish' then do_publish(params)
+        when 'subscribe', 'unsubscribe' then do_subscribe(params)
+        else throw :halt, [400, "Bad request, unknown 'hub.mode' parameter"]
+      end  
     end
   
   end
