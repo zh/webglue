@@ -5,7 +5,7 @@ require 'topics'
 
 module WebGlue
 
-  class App < Sinatra::Default
+  class App < Sinatra::Base
   
     set :sessions, false
     set :run, false
@@ -80,11 +80,43 @@ module WebGlue
             if Config::DEBUG == true
               case e
                 when Timeout::Error
-                  puts "Timeout: #{sub}"
+                  puts "Timeout: #{url}"
                 else  
                   puts e.to_s 
               end
             end 
+            next
+          end
+        end
+      end
+
+      # verify all non-verified (state=1)  subscribers ('async' mode)
+      def verify_async_subs
+        subs = DB[:subscriptions].filter(:vmode => 'async', :state => 1)
+        subs.each do |sub|
+          url = Topic.to_url(sub[:callback])
+          topic =  DB[:topics].filter(:id => sub[:topic_id]).first
+          topic = Topic.to_url(topic[:url]) if topic
+          query = { 'hub.mode' => sub[:vmode],
+                    'hub.topic' => topic,
+                    'hub.lease_seconds' => 0,  # still no subscription refreshing support
+                    'hub.challenge' => self.gen_id }
+          query['hub.verify_token'] = sub[:vtoken] if sub[:vtoken]
+          begin
+            MyTimer.timeout(Config::GIVEUP) do
+              res = HTTPClient.get_content(url, query)
+              raise "do_verify(#{url})" unless res and res == query['hub.challenge']
+            end
+            DB[:subscriptions].filter(:callback => sub[:callback]).update(:state => 0)
+          rescue Exception => e
+            if Config::DEBUG == true
+              case e
+                when Timeout::Error
+                  puts "Timeout: #{url}"
+                else
+                  puts e.to_s
+              end
+            end
             next
           end
         end
@@ -207,6 +239,12 @@ module WebGlue
         when 'subscribe', 'unsubscribe' then do_subscribe(params)
         else throw :halt, [400, "Bad request, unknown 'hub.mode' parameter"]
       end  
+    end
+
+    post '/verify' do
+      protected!
+      verify_async_subs
+      return "Done."
     end
 
     get '/admin' do
