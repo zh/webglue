@@ -1,6 +1,10 @@
 #!/usr/bin/env ruby
 
-%w{ rubygems sinatra sequel zlib json httpclient atom hmac-sha1 }.each { |lib| require lib }
+require "rubygems"
+require "bundler"
+Bundler.setup(:default)
+
+%w{ sinatra sequel zlib json httpclient atom hmac-sha1 }.each { |lib| require lib }
 require 'topics'
 
 module WebGlue

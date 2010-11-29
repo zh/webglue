@@ -1,6 +1,10 @@
 #!/usr/bin/env ruby
 
-%w{ rubygems sequel zlib json httpclient atom eventmachine }.each { |lib| require lib }
+require "rubygems"
+require "bundler"
+Bundler.setup(:default)
+
+%w{ sequel zlib json httpclient atom eventmachine }.each { |lib| require lib }
 require 'topics'
 
 DB = Sequel.connect(ENV['DATABASE_URL'] || 'sqlite://webglue.db')
