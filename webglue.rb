@@ -327,5 +327,16 @@ module WebGlue
       throw :halt, [200, ListSubscriptions.new]
     end
 
+    get '/admin/cleanup' do
+      protected!
+      # old topics with no subscriptions
+      ids = DB[:topics].filter(:created < (Time.now - 24*3600*7)).select(:id,:created).collect { 
+        |t| t[:id] if DB[:subscriptions].filter(:topic_id=>t[:id]).count == 0 }
+      ids.delete_if {|x| x.nil?}
+      count = DB[:topics].filter(:id => ids).delete
+      content_type 'text/plain', :charset => 'utf-8'
+      throw :halt, [200, "#{count} topics deleted."]
+    end
+
   end
 end
