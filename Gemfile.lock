@@ -8,6 +8,7 @@ GEM
     eventmachine (0.12.10)
     httpclient (2.1.5.2)
     json (1.4.6)
+    kgio (2.0.0)
     libxml-ruby (1.1.4)
     rack (1.2.1)
     rake (0.8.7)
@@ -24,6 +25,9 @@ GEM
       eventmachine (>= 0.12.6)
       rack (>= 1.0.0)
     tilt (1.1)
+    unicorn (3.0.0)
+      kgio (~> 2.0.0)
+      rack
 
 PLATFORMS
   ruby
@@ -41,3 +45,4 @@ DEPENDENCIES
   sinatra
   sqlite3-ruby
   thin
+  unicorn

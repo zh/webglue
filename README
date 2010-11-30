@@ -54,7 +54,12 @@ To start it locally (on port 4567 for example):
 
   git clone git://github.com/zh/webglue.git   
   cd webglue
-  rackup -p 4567
+  bundle install
+  bundle exec rackup -p 4567 -s thin
+
+For production environment, maybe using 'unicorn' is better:
+
+  bundle exec unicorn -c ./unicorn.conf -E production
 
 (optional)
 

@@ -4,18 +4,30 @@ require "rubygems"
 require "bundler"
 Bundler.setup(:default)
 
-%w{ sinatra sequel zlib json httpclient atom hmac-sha1 }.each { |lib| require lib }
+ENV['RACK_ENV'] ||= "development"
+
+%w{ logger sinatra sequel zlib json httpclient atom hmac-sha1 }.each { |lib| require lib }
 require 'topics'
 
 module WebGlue
 
   class App < Sinatra::Base
-  
-    set :sessions, false
-    set :run, false
-    set :environment, ENV['RACK_ENV']
-  
+ 
+    enable :raise_errors
+    enable :logging, :dump_errors
+    disable :sessions
+    disable :run
+
     configure do
+      LOGGER = Logger.new(File.join(File.dirname(__FILE__), 'log', "#{ENV['RACK_ENV']}.log"), 'daily')
+      if ENV['RACK_ENV'] == "production"
+        LOGGER.level = Logger::INFO
+        APP_DEBUG = false
+      else
+        LOGGER.level = Logger::DEBUG
+        APP_DEBUG = Config::DEBUG
+      end
+
       DB = Sequel.connect(ENV['DATABASE_URL'] || 'sqlite://webglue.db')
     
       unless DB.table_exists? "topics"
@@ -49,6 +61,28 @@ module WebGlue
     end
     
     helpers do
+      def timestamp
+        Time.new.strftime("%Y-%m-%d %H:%M:%S")
+      end
+
+      def logger
+        LOGGER 
+      end
+
+      def log_debug(string)
+        puts("D, [#{timestamp}] DEBUG : #{string}") if APP_DEBUG == true
+        logger.debug(string)
+      end  
+
+      def log_error(string)
+        puts("E, [#{timestamp}] ERROR : #{string}") if APP_DEBUG == true
+        logger.error(string)
+      end  
+
+      def log_exception(ex)
+        logger.error("Exception #{ex.inspect}\nParams #{params.inspect}\n#{ex.backtrace.join("\n")}")
+      end
+
       def protected!
         response['WWW-Authenticate'] = %(Basic realm="Protected Area") and \
         throw(:halt, [401, "Not authorized\n"]) and \
@@ -78,16 +112,15 @@ module WebGlue
               extheaders['X-Hub-Signature'] = "sha1=#{signature}"
             end  
             MyTimer.timeout(Config::GIVEUP) do
+              log_debug("Updating #{url} with new items")
               HTTPClient.post(url, msg, extheaders)
             end
           rescue Exception => e
-            if Config::DEBUG == true
-              case e
-                when Timeout::Error
-                  puts "Timeout: #{url}"
-                else  
-                  puts e.to_s 
-              end
+            case e
+            when Timeout::Error
+              log_error("Timeout: #{url}")
+            else
+              log_exception(e)
             end 
             next
           end
@@ -113,14 +146,12 @@ module WebGlue
             end
             DB[:subscriptions].filter(:callback => sub[:callback]).update(:state => 0)
           rescue Exception => e
-            if Config::DEBUG == true
-              case e
-                when Timeout::Error
-                  puts "Timeout: #{url}"
-                else
-                  puts e.to_s
-              end
-            end
+            case e
+            when Timeout::Error
+              log_error("Timeout: #{url}")
+            else
+              log_exception(e)
+            end 
             next
           end
         end
@@ -132,25 +163,33 @@ module WebGlue
         unless params['hub.url'] and not params['hub.url'].empty?
           throw :halt, [400, "Bad request: Empty or missing 'hub.url' parameter"]
         end
+        log_debug("Got update on URL: " + params['hub.url'])
         begin
           # TODO: move the subscribers notifications to some background job (worker?)
           hash = Topic.to_hash(params['hub.url'])
           topic = DB[:topics].filter(:url => hash)
           if topic.first # already registered
+            log_debug("Topic exists: " + params['hub.url'])
             # minimum 5 min interval between pings
             time_diff = (Time.now - topic.first[:updated]).to_i
-            throw :halt, [204, "204 Try after #{(300-time_diff)/60 +1} min"] if time_diff < 300
+            if time_diff < 300
+              log_error("Too fast update (time_diff=#{time_diff}). Try after #{(300-time_diff)/60 +1} minute(s).")
+              throw :halt, [204, "204 Try after #{(300-time_diff)/60 +1} minute(s)"]
+            end
             topic.update(:updated => Time.now, :dirty => 1)
             # only verified subscribers, subscribed to that topic
             subscribers = DB[:subscriptions].filter(:topic_id => topic.first[:id], :state => 0)
+            log_debug("#{params['hub.url']} subscribers count: #{subscribers.count}")
             atom_diff = Topic.diff(params['hub.url'], true)
             postman(subscribers, atom_diff) if (subscribers.count > 0 and atom_diff)
             topic.update(:dirty => 0)
-          else  
+          else
+            log_debug("New topic: " + params['hub.url'])
             DB[:topics] << { :url => hash, :created => Time.now, :updated => Time.now }
           end
           throw :halt, [204, "204 No Content"]
         rescue Exception => e
+          log_exception(e)
           throw :halt, [404, e.to_s]
         end
       end
@@ -185,7 +224,7 @@ module WebGlue
         begin
           hash =  Topic.to_hash(topic)
           tp =  DB[:topics].filter(:url => hash).first
-          throw :halt, [404, "Not Found"] unless tp[:id]
+          throw :halt, [404, "Not Found"] if tp.nil? or tp[:id].nil?
           
           state = (verify == 'async') ? 1 : 0
           query = { 'hub.mode' => mode,
@@ -204,6 +243,7 @@ module WebGlue
       
           # Add subscription
           # subscribe/unsubscribe to/from ALL channels with that topic
+          log_debug("Subscription: mode=#{mode}, topic=#{topic}, callback=#{callback}")
           cb =  DB[:subscriptions].filter(:topic_id => tp[:id], :callback => Topic.to_hash(callback))
           cb.delete if (mode == 'unsubscribe' or cb.first)
           if mode == 'subscribe'
@@ -214,10 +254,40 @@ module WebGlue
           throw :halt, verify == 'async' ? [202, "202 Scheduled for verification"] : 
                                            [204, "204 No Content"]
         rescue Exception => e
+          log_exception(e)
           throw :halt, [409, "Subscription verification failed: #{e.to_s}"]
         end
       end
-    
+
+      class ListSubscriptions
+        def each
+          yield "List of subscriptions by topic\n\n"
+          topics = DB[:topics]
+          topics.each do |topic|
+            yield "Topic\n"
+            yield " URL:     " + Topic.to_url(topic[:url]) + "\n"
+            yield " Created: " + topic[:created].to_s + "\n"
+            yield " Updated: " + topic[:updated].to_s + "\n"
+
+            subscribers = DB[:subscriptions].filter(:topic_id => topic[:id])
+            yield " Subscriptions (count=" + subscribers.count.to_s + ")\n"
+
+            subscribers.each do |sub|
+              yield "  Id:                " + sub[:id].to_s + "\n"
+              yield "  Subscriber:        " + Topic.to_url(sub[:callback]) + "\n"
+              yield "  Created:           " + (sub[:created].nil? ? "" : sub[:created]) + "\n"
+              yield "  Mode:              " + sub[:vmode] + "\n"
+              yield "  Verified:          " + (sub[:state] == 0 ? "yes" : "no") + "\n"
+              yield "\n"
+            end
+          end
+        end
+      end
+
+    end
+
+    error do
+      log_error(request.env['sinatra.error'].inspect);
     end
     
     get '/' do
@@ -253,22 +323,9 @@ module WebGlue
 
     get '/admin' do
       protected!
-      text  = "<h1>List topics</h1>\n<ul>\n"
-      DB[:topics].each do |topic|
-        text += "<li><b>topic</b>: #{Topic.to_url(topic[:url])}</li>\n"
-        subscribers = DB[:subscriptions].filter(:topic_id => topic[:id])
-        if subscribers.count > 0
-          text += "<ul>\n"
-          subscribers.each do |sub|
-            text += "<li>#{Topic.to_url(sub[:callback])}"
-            text += " <b>(valid)</b>" if sub[:state].to_i == 0
-            text += "</li>\n"
-          end  
-          text += "</ul>\n"
-        end  
-      end  
-      text += "</ul>"
+      content_type 'text/plain', :charset => 'utf-8'
+      throw :halt, [200, ListSubscriptions.new]
     end
-  
+
   end
 end

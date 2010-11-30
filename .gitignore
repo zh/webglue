@@ -8,14 +8,12 @@
 *.swp
 *.pyc
 *.db
-config/*.yml
-config/*.conf
 log/*.pid
 log/*.log
 log/*.log.*
 tmp/**/*
+feeds/*.yml
 .DS_Store
 .idea
-.bundle
 vendor/ruby
 backup
