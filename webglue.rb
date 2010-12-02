@@ -1,8 +1,7 @@
 #!/usr/bin/env ruby
 
 require "rubygems"
-require "bundler"
-Bundler.setup(:default)
+require "bundler/setup"
 
 ENV['RACK_ENV'] ||= "development"
 
