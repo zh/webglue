@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Webglue by zh</title>
+    
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Webglue</h1>
+        <p>PubSubHubbub Ruby implementation</p>
+        <p class="view"><a href="https://github.com/zh/webglue">View the Project on GitHub <small>zh/webglue</small></a></p>
+        <ul>
+          <li><a href="https://github.com/zh/webglue/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/zh/webglue/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/zh/webglue">Fork On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>WebGlue</h1>
+
+<p>PubSubHubbub Ruby implementation</p>
+
+<h2>Overview</h2>
+
+<p>PubSubHubbub (PSHB) is a simple, open, server-to-server web-hook-based pubsub 
+(publish/subscribe) protocol as an extension to Atom. For more details see
+<a href="http://code.google.com/p/pubsubhubbub/">http://code.google.com/p/pubsubhubbub/</a> . 
+Current project is as simple as possible implementation in Ruby of PSHB Core 0.2 
+Draft-compatible hub.</p>
+
+<h3>Implemented features:</h3>
+
+<ul>
+<li>Publishing new topics (Atom Feeds)</li>
+<li>Subscriptions to existing topics (including callbacks verification) - 'sync' and
+'async' mode verifications</li>
+<li>Fetching atom feeds, finding the new entries and sending them to all subscribers</li>
+<li>Authenticated Content Distribution - 'hub.secret'</li>
+</ul><h3>Still missing (not implemented):</h3>
+
+<ul>
+<li>Publishers need to manually ping the hub (no automatic check for updated feeds)</li>
+<li>Can only process Atom feeds, not RSS</li>
+</ul><h2>Required gems</h2>
+
+<ul>
+<li>sinatra - web framework - routing etc.</li>
+<li>httpclient - POST requests, callbacks verification</li>
+<li>crack - XML parsing</li>
+<li>ratom - Atom feeds fetching/parsing</li>
+<li>SystemTimer - for timeouts on unsuccessful requests</li>
+<li>ruby-hmac - HMAC-SHA1 for content digests</li>
+</ul><p>If you are using <a href="http://heroku.com/">http://heroku.com/</a> for deployment, your '.gems' file will look like:</p>
+
+<pre><code>httpclient
+SystemTimer
+crack
+ratom
+ruby-hmac
+</code></pre>
+
+<h2>Running</h2>
+
+<p>The whole system is implemented as a Sinatra [ <a href="http://www.sinatrarb.com/">http://www.sinatrarb.com/</a> ] application. 
+To start it locally (on port 4567 for example):</p>
+
+<pre><code>git clone git://github.com/zh/webglue.git   
+cd webglue
+bundle install
+bundle exec rackup -p 4567 -s thin
+</code></pre>
+
+<p>For production environment, maybe using 'unicorn' is better:</p>
+
+<pre><code>bundle exec unicorn -c ./unicorn.conf -E production
+</code></pre>
+
+<p>(optional)</p>
+
+<p>'async' verification worker process:</p>
+
+<ul>
+<li>
+<p>from crontab:</p>
+
+<p>require 'worker'
+WebGlue::Worker.verify</p>
+</li>
+<li>
+<p>independent daemon (checks every WebGlue::Config.CHECK minutes)</p>
+
+<p>require 'worker'
+WebGlue::Worker.run</p>
+</li>
+</ul><p>Or you can uncomment the proper lines in worker.rb ('if <strong>FILE</strong> == $0' block) and do</p>
+
+<pre><code>ruby worker.rb
+</code></pre>
+
+<p><a href="http://heroku.com/">http://heroku.com/</a> will automatically recognize the startup file (config.ru) and will 
+run your application after the deployment:</p>
+
+<pre><code>git clone git://github.com/zh/webglue.git
+cd webglue
+heroku create mypubhub
+git push heroku master
+</code></pre>
+
+<h2>PubSub</h2>
+
+<p>Both publishing and subscriptions going to the same endpoint - '/'. So if your application
+is running on URL http://localhost:4567/ , that will be the endpoint for both publishers
+(atom:link[<a href="/rel" class="user-mention">@rel</a>="hub"] in the feed) and subscribers (POST requests for subscription).
+Only for debugging purposes, there are two web form on '/publish' and '/subscribe' URLs.</p>
+
+<h2>Publishing new topics</h2>
+
+<p>If your application is running on URL http://localhost:4567/ , go to 
+http://localhost:4567/publish and insert your Atom feed in the 'Topic:' text box. Press
+"Publish". There will be no changes on the screen, because the hub is responding with
+HTTP code 204 "No Content".</p>
+
+<p>You can also POST directly to http://localhost:4567/ with parameters, described
+in the "PubSubHubbub Core 0.2" document - 
+<a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html">http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html</a></p>
+
+<p>Also in your feed, insert the line:</p>
+
+<p>  (adjust for your install)</p>
+
+<p>For now, there is no automatic check for updated feeds implemented, so after changes in
+some feed, repeat the actions, described above (from the web form or via POST).
+Publishing is possible once every 5 min.</p>
+
+<h2>Subscription to existing topics</h2>
+
+<p>If your application is running on URL http://localhost:4567/ , go to
+http://localhost:4567/subscribe and fill the web form:</p>
+
+<ul>
+<li>Callback - URL to the webhook, which will receive Atom-formated notifications</li>
+<li>Topic - Atom feed URL, ALREADY PUBLISHED to the system - see 'Publishing new topics' 
+above</li>
+<li>Verify mode - Both 'Synchronous' and 'Asynchronous' modes supported</li>
+<li>Mode - 'Subscribe' for adding new subscribers and 'Unsubscribe' for removing 
+the already inserted onces</li>
+<li>Verify token - something that your callback need to approve</li>
+<li>Secret - used to compute an HMAC digest of the content, send to the subscriber</li>
+</ul><p>You can send also POST subscription requests with the required parameters directly to
+the hub endpoint (http://localhost:4567/ in our example).</p>
+
+<p>The hub is implementing callbacks verification, described in the "PubSubHubbub Core 0.2" 
+document (sending back 'hub.challenge' parameter in the response body).
+In 'Synchronous' mode there will be no changes on the screen after subscription,<br>
+because the hub is responding with HTTP code 204 "No Content".
+In 'Asynchronous' mode the hub will respond with HTTP code 202 "Scheduled for verification"</p>
+
+<h2>Notifications format</h2>
+
+<p>Current implementation fetch the Atom feeds and just remove already known entries from 
+them, without touching other parts of the feed ('title', 'id', 'author' etc.). 
+After that, the feed, with only new entries in it is resend to all topic's subscribers. 
+Because of that, the hub cannot process RSS feeds and may have some problems with 
+non-well formated feeds. I'll try to fix this in the future releases.
+If the subscriber supplied a value for 'hub.secret' in their subscription request, 
+the hub will generate an HMAC signature of the payload and include that signature in 
+the response headers ('X-Hub-Signature') of the notification.</p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/zh">zh</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><!--<![endif]-->
+  </body>
+</html>
