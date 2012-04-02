@@ -93,14 +93,14 @@ bundle exec rackup -p 4567 -s thin
 <li>
 <p>from crontab:</p>
 
-<p>require 'worker'
-WebGlue::Worker.verify</p>
+<pre><code>require 'worker'
+WebGlue::Worker.verify</code></pre>
 </li>
 <li>
 <p>independent daemon (checks every WebGlue::Config.CHECK minutes)</p>
 
-<p>require 'worker'
-WebGlue::Worker.run</p>
+<pre><code>require 'worker'
+WebGlue::Worker.run</code></pre>
 </li>
 </ul><p>Or you can uncomment the proper lines in worker.rb ('if <strong>FILE</strong> == $0' block) and do</p>
 
@@ -131,8 +131,8 @@ http://localhost:4567/publish and insert your Atom feed in the 'Topic:' text box
 HTTP code 204 "No Content".</p>
 
 <p>You can also POST directly to http://localhost:4567/ with parameters, described
-in the "PubSubHubbub Core 0.2" document - 
-<a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html">http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html</a></p>
+in the <a href="http://pubsubhubbub.googlecode.com/svn/trunk/pubsubhubbub-core-0.2.html">"PubSubHubbub Core 0.2" document</a>
+</p>
 
 <p>Also in your feed, insert the line:</p>
 
